@@ -1,0 +1,93 @@
+version: '3.9'
+
+services:
+  postgres:
+    image: postgres:15
+    container_name: costumers_db
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: admin
+      POSTGRES_DB: restorant
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  rabbitmq:
+    image: rabbitmq:3-management
+    container_name: rabbitmq
+    environment:
+      RABBITMQ_DEFAULT_USER: guest
+      RABBITMQ_DEFAULT_PASS: guest
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+
+  redis:
+    image: redis:7
+    container_name: redis
+    ports:
+      - "6379:6379"
+
+  contact_verification_service:
+    build:
+      context: ./contact_verification_service
+      dockerfile: Dockerfile
+    depends_on:
+      - postgres
+      - rabbitmq
+      - redis
+    ports:
+      - "8081:8080"
+    environment:
+      RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672
+      REDIS_URL: redis://redis:6379
+      REDIS_PASSWORD : ""
+
+
+  costumers_service:
+    build:
+      context: ./costumers_service
+      dockerfile: Dockerfile
+    depends_on:
+      - postgres
+      - rabbitmq
+      - redis
+    ports:
+      - "8082:8080"
+    environment:
+      RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672
+      DATABASE_URL: postgres://postgres:admin@postgres:5432/restorant
+      REDIS_URL: redis://redis:6379
+      REDIS_PASSWORD : ""
+
+  event_handler_service:
+    build:
+      context: ./event_handler_service
+      dockerfile: Dockerfile
+    depends_on:
+      - rabbitmq
+    ports:
+      - "8083:8080"
+    environment:
+      RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672
+
+  notification_service:
+    build:
+      context: ./notification_service
+      dockerfile: Dockerfile
+    depends_on:
+      - redis
+      - rabbitmq
+    ports:
+      - "8084:8080"
+    environment:
+      REDIS_URL: redis://redis:6379
+      RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672
+      SMTP_HOST: "smtp.gmail.com"
+      SMTP_PORT: "587"
+      SMTP_SENDER: "restoranto.app@gmail.com"
+      SMTP_PASSWORD: "keaq ctom nttn chdc"
+
+volumes:
+  postgres_data:

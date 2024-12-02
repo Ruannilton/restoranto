@@ -68,7 +68,7 @@ func (app *CostumersServiceApp) connectCostumersDb() error {
 }
 
 func (app *CostumersServiceApp) connectRabbitMq() error {
-	rabbitConnectionString := os.Getenv("RABBIT_MQ_CONNECTION")
+	rabbitConnectionString := os.Getenv("RABBITMQ_URL")
 	rmqConn, err := amqp.Dial(rabbitConnectionString)
 	if err != nil {
 		fmt.Println("Failed to connect with rabbitmq")

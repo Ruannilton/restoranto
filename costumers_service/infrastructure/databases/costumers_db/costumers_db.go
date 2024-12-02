@@ -10,15 +10,9 @@ import (
 
 func ConnectPostgresDB() (*sql.DB, error) {
 
-	host := os.Getenv("PG_HOST")
-	port := os.Getenv("PG_PORT")
-	user := os.Getenv("PG_USER")
-	pass := os.Getenv("PG_PASSWORD")
-	name := os.Getenv("PG_DB_NAME")
+	dbURL := os.Getenv("DATABASE_URL")
 
-	connectionString := fmt.Sprintf("host=%s port=%s user=%s password=%s dbname=%s sslmode=disable", host, port, user, pass, name)
-
-	db, err := sql.Open("postgres", connectionString)
+	db, err := sql.Open("postgres", dbURL)
 
 	if err != nil {
 		fmt.Println("Failed to connect to database")

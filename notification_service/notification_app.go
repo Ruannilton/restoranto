@@ -40,7 +40,7 @@ func NewNotificationApp(stopSig chan os.Signal) (NotificationApp, error) {
 }
 
 func (app *NotificationApp) initInfrastructure() error {
-	rabbitConnectionString := os.Getenv("RABBIT_MQ_CONNECTION")
+	rabbitConnectionString := os.Getenv("RABBITMQ_URL")
 	rmqConn, err := amqp.Dial(rabbitConnectionString)
 
 	if err != nil {

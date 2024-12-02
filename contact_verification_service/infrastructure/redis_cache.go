@@ -1,8 +1,7 @@
-package repositories
+package infrastructure
 
 import (
 	"context"
-	"costumers-api/domain/domain_errors"
 	"fmt"
 	"os"
 	"time"
@@ -44,8 +43,8 @@ func (cache RedisCache) Set(key string, value string, duration time.Duration) er
 	redisErr := status.Err()
 
 	if redisErr != nil {
-		err := domain_errors.NewInfrastructureError(DistributedCacheServiceName, domain_errors.CodeInvalidOperation, "failed to add entry to cache", redisErr)
-		return err
+		// TODO: handle error
+		return redisErr
 	}
 
 	return nil
@@ -55,13 +54,13 @@ func (cache RedisCache) Get(key string) (string, error) {
 	data, redisErr := cache.client.Get(cache.ctx, key).Result()
 
 	if redisErr == redis.Nil {
-		err := domain_errors.NewInfrastructureError(DistributedCacheServiceName, domain_errors.CodeEntryNotFound, "failed to get entry from cache", redisErr)
-		return "", err
+		// TODO: handle error
+		return "", redisErr
 	}
 
 	if redisErr != nil {
-		err := domain_errors.NewInfrastructureError(DistributedCacheServiceName, domain_errors.CodeInvalidOperation, "failed to get entry from cache", redisErr)
-		return "", err
+		// TODO: handle error
+		return "", redisErr
 	}
 
 	return data, nil
