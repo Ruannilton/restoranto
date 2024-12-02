@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"os"
 
@@ -15,6 +16,7 @@ type ContactVerificationApp struct {
 	stopSig             chan os.Signal
 	rmqpConnection      *amqp.Connection
 	messagePublisher    dependencies.IMessagePublisher
+	distributedCache    dependencies.IDistributedCacheRepository
 	verifyEmailUseCase  usecases.VerifyEmailUseCase
 	verifySmsUseCase    usecases.VerifySMSUseCase
 	verifyEmailListener presentation.VerifyEmailListener
@@ -35,22 +37,24 @@ func NewContactVerificationApp(stopSig chan os.Signal) (ContactVerificationApp, 
 }
 
 func (app *ContactVerificationApp) initInfrastructure() error {
-	rabbitConnectionString := os.Getenv("RABBIT_MQ_CONNECTION")
+	rabbitConnectionString := os.Getenv("RABBITMQ_URL")
 	rmqConn, err := amqp.Dial(rabbitConnectionString)
 	if err != nil {
 		fmt.Println("Failed to connect with rabbitmq")
 		return err
 	}
-
 	publisher := infrastructure.NewMessagePublisher(rmqConn)
+	cache := infrastructure.NewRedisCache(context.Background())
+
 	app.messagePublisher = publisher
 	app.rmqpConnection = rmqConn
+	app.distributedCache = cache
 	return nil
 }
 
 func (app *ContactVerificationApp) initUseCases() {
-	emailUseCase := usecases.NewVerifyEmailUseCase(app.messagePublisher)
-	smsUseCase := usecases.NewVerifySMSUseCase(app.messagePublisher)
+	emailUseCase := usecases.NewVerifyEmailUseCase(app.messagePublisher, app.distributedCache)
+	smsUseCase := usecases.NewVerifySMSUseCase(app.messagePublisher, app.distributedCache)
 
 	app.verifyEmailUseCase = emailUseCase
 	app.verifySmsUseCase = smsUseCase
