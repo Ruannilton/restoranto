@@ -31,7 +31,12 @@ func NewEventHandlerApp(stopSig chan os.Signal) (EventHandlerApp, error) {
 	}
 
 	app.initUseCases()
-	app.initPresentation()
+	err = app.initPresentation()
+
+	if err != nil {
+		//TODO: handle error
+		return EventHandlerApp{}, err
+	}
 
 	return app, nil
 }
@@ -56,10 +61,19 @@ func (app *EventHandlerApp) initUseCases() {
 	app.costumerCreatedUseCase = costumerCreated
 }
 
-func (app *EventHandlerApp) initPresentation() {
-	costumerCreated := presentation.NewCostumerCreatedListener(app.rmqpConnection, app.costumerCreatedUseCase)
+func (app *EventHandlerApp) initPresentation() error {
+	listener, err := infrastructure.NewMessageListener(app.rmqpConnection)
+
+	if err != nil {
+		fmt.Println("Failed to create email listener")
+		return err
+	}
+
+	costumerCreated := presentation.NewCostumerCreatedListener(listener, app.costumerCreatedUseCase)
 
 	app.costumerCreatedPresentation = costumerCreated
+
+	return nil
 }
 
 func (app *EventHandlerApp) StartWorkers() {

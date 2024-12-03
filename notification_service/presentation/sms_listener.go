@@ -5,36 +5,29 @@ import (
 
 	messagecontracts "github.com/Ruannilton/go-msg-contracts/pkg/message_contracts"
 	"github.com/Ruannilton/go-msg-contracts/pkg/queues"
+	"github.com/Ruannilton/notification-service/domain/dependencies"
 	"github.com/Ruannilton/notification-service/domain/models"
 	usecases "github.com/Ruannilton/notification-service/domain/use_cases"
-	amqp "github.com/rabbitmq/amqp091-go"
 )
 
 type SMSListener struct {
-	mqConnection *amqp.Connection
-	smsSender    usecases.SendSMSUseCase
+	listener  dependencies.IMessageListener
+	smsSender usecases.SendSMSUseCase
 }
 
 const SMSListenerName = "notification-service-sms-listener"
 
-func NewSMSListener(mqConnection *amqp.Connection, smsSender usecases.SendSMSUseCase) SMSListener {
+func NewSMSListener(listener dependencies.IMessageListener, smsSender usecases.SendSMSUseCase) SMSListener {
 	return SMSListener{
-		mqConnection: mqConnection,
-		smsSender:    smsSender,
+		listener:  listener,
+		smsSender: smsSender,
 	}
 }
 
 func (listener SMSListener) ReceiveMessages(stopSig chan os.Signal) {
-	channel, err := listener.mqConnection.Channel()
+	defer listener.listener.Close()
 
-	if err != nil {
-		//TODO: handle error
-		return
-	}
-
-	defer channel.Close()
-
-	messageChannel, err := channel.Consume(queues.SMSValidationQueue, SMSListenerName, false, false, false, false, nil)
+	messageChannel, err := listener.listener.Listen(queues.EmailValidationQueue)
 
 	if err != nil {
 		//TODO: handle error
@@ -47,10 +40,10 @@ func (listener SMSListener) ReceiveMessages(stopSig chan os.Signal) {
 			case <-stopSig:
 				return
 			case msg := <-messageChannel:
-				message, err := messagecontracts.SendSMSMessage{}.FromBinary(msg.Body)
+				message, err := messagecontracts.SendSMSMessage{}.FromBinary(msg.GetContent())
 
 				if err != nil {
-					msg.Nack(false, false)
+					msg.Nack(false)
 					continue
 				}
 
@@ -62,11 +55,11 @@ func (listener SMSListener) ReceiveMessages(stopSig chan os.Signal) {
 				err = listener.smsSender.Execute(sms)
 
 				if err != nil {
-					msg.Nack(false, true)
+					msg.Nack(true)
 					continue
 				}
 
-				msg.Ack(false)
+				msg.Ack()
 			}
 		}
 	}()

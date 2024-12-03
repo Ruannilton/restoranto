@@ -3,37 +3,31 @@ package presentation
 import (
 	"os"
 
+	"github.com/Ruannilton/contact-verification-service/domain/dependencies"
 	"github.com/Ruannilton/contact-verification-service/domain/usecases"
 	messagecontracts "github.com/Ruannilton/go-msg-contracts/pkg/message_contracts"
 	"github.com/Ruannilton/go-msg-contracts/pkg/queues"
-	amqp "github.com/rabbitmq/amqp091-go"
 )
 
 const VerifyEmailListenerName = "contact-verification-verify-email-listener"
 
 type VerifyEmailListener struct {
-	mqConnection *amqp.Connection
-	useCase      usecases.VerifyEmailUseCase
+	listener dependencies.IMessageListener
+	useCase  usecases.VerifyEmailUseCase
 }
 
-func NewVerifyEmailListener(mqConnection *amqp.Connection, useCase usecases.VerifyEmailUseCase) VerifyEmailListener {
+func NewVerifyEmailListener(listener dependencies.IMessageListener, useCase usecases.VerifyEmailUseCase) VerifyEmailListener {
 	return VerifyEmailListener{
-		mqConnection: mqConnection,
-		useCase:      useCase,
+		listener: listener,
+		useCase:  useCase,
 	}
 }
 
-func (listener VerifyEmailListener) ReceiveMessages(stopSig chan os.Signal) {
-	channel, err := listener.mqConnection.Channel()
+func (emailListener VerifyEmailListener) ReceiveMessages(stopSig chan os.Signal) {
 
-	if err != nil {
-		//TODO: handle error
-		return
-	}
+	defer emailListener.listener.Close()
 
-	defer channel.Close()
-
-	messageChannel, err := channel.Consume(queues.EmailValidationQueue, VerifyEmailListenerName, false, false, false, false, nil)
+	messageChannel, err := emailListener.listener.Listen(queues.EmailValidationQueue)
 
 	if err != nil {
 		//TODO: handle error
@@ -46,23 +40,23 @@ func (listener VerifyEmailListener) ReceiveMessages(stopSig chan os.Signal) {
 			case <-stopSig:
 				return
 			case msg := <-messageChannel:
-				message, err := messagecontracts.VerifyEmailMessage{}.FromBinary(msg.Body)
+				message, err := messagecontracts.VerifyEmailMessage{}.FromBinary(msg.GetContent())
 
 				if err != nil {
 					//TODO: handle error
-					msg.Nack(false, false)
+					msg.Nack(false)
 					continue
 				}
 
-				err = listener.useCase.Execute(message)
+				err = emailListener.useCase.Execute(message)
 
 				if err != nil {
 					//TODO: handle error
-					msg.Nack(false, true)
+					msg.Nack(true)
 					continue
 				}
 
-				msg.Ack(false)
+				msg.Ack()
 			}
 		}
 	}()

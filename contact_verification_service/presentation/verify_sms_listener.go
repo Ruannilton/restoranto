@@ -3,37 +3,30 @@ package presentation
 import (
 	"os"
 
+	"github.com/Ruannilton/contact-verification-service/domain/dependencies"
 	"github.com/Ruannilton/contact-verification-service/domain/usecases"
 	messagecontracts "github.com/Ruannilton/go-msg-contracts/pkg/message_contracts"
 	"github.com/Ruannilton/go-msg-contracts/pkg/queues"
-	amqp "github.com/rabbitmq/amqp091-go"
 )
 
 const VerifySMSListenerName = "contact-verification-verify-sms-listener"
 
 type VerifySMSListener struct {
-	mqConnection *amqp.Connection
-	useCase      usecases.VerifySMSUseCase
+	listener dependencies.IMessageListener
+	useCase  usecases.VerifySMSUseCase
 }
 
-func NewVerifySMSListener(mqConnection *amqp.Connection, useCase usecases.VerifySMSUseCase) VerifySMSListener {
+func NewVerifySMSListener(listener dependencies.IMessageListener, useCase usecases.VerifySMSUseCase) VerifySMSListener {
 	return VerifySMSListener{
-		mqConnection: mqConnection,
-		useCase:      useCase,
+		listener: listener,
+		useCase:  useCase,
 	}
 }
 
-func (listener VerifySMSListener) ReceiveMessages(stopSig chan os.Signal) {
-	channel, err := listener.mqConnection.Channel()
+func (smsListener VerifySMSListener) ReceiveMessages(stopSig chan os.Signal) {
+	defer smsListener.listener.Close()
 
-	if err != nil {
-		//TODO: handle error
-		return
-	}
-
-	defer channel.Close()
-
-	messageChannel, err := channel.Consume(queues.SMSValidationQueue, VerifySMSListenerName, false, false, false, false, nil)
+	messageChannel, err := smsListener.listener.Listen(queues.SMSValidationQueue)
 
 	if err != nil {
 		//TODO: handle error
@@ -46,23 +39,23 @@ func (listener VerifySMSListener) ReceiveMessages(stopSig chan os.Signal) {
 			case <-stopSig:
 				return
 			case msg := <-messageChannel:
-				message, err := messagecontracts.VerifySMSMessage{}.FromBinary(msg.Body)
+				message, err := messagecontracts.VerifySMSMessage{}.FromBinary(msg.GetContent())
 
 				if err != nil {
 					//TODO: handle error
-					msg.Nack(false, false)
+					_ = msg.Nack(false)
 					continue
 				}
 
-				err = listener.useCase.Execute(message)
+				err = smsListener.useCase.Execute(message)
 
 				if err != nil {
 					//TODO: handle error
-					msg.Nack(false, true)
+					_ = msg.Nack(true)
 					continue
 				}
 
-				msg.Ack(false)
+				_ = msg.Ack()
 			}
 		}
 	}()

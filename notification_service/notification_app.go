@@ -30,11 +30,17 @@ func NewNotificationApp(stopSig chan os.Signal) (NotificationApp, error) {
 	err := app.initInfrastructure()
 
 	if err != nil {
+		//TODO: error handling
 		return NotificationApp{}, err
 	}
 
 	app.initUseCases()
-	app.initPresentation()
+	err = app.initPresentation()
+
+	if err != nil {
+		//TODO: error handling
+		return NotificationApp{}, err
+	}
 
 	return app, nil
 }
@@ -71,12 +77,28 @@ func (app *NotificationApp) initUseCases() {
 	app.sendSMSUseCase = sendSms
 }
 
-func (app *NotificationApp) initPresentation() {
-	emailListener := presentation.NewEmailListener(app.rmqpConnection, app.sendEmailUseCase)
-	smsListener := presentation.NewSMSListener(app.rmqpConnection, app.sendSMSUseCase)
+func (app *NotificationApp) initPresentation() error {
+	emailListener, err := infrastructure.NewMessageListener(app.rmqpConnection)
 
-	app.emailListener = emailListener
-	app.smsListener = smsListener
+	if err != nil {
+		fmt.Println("Failed to create email listener")
+		return err
+	}
+
+	smsListener, err := infrastructure.NewMessageListener(app.rmqpConnection)
+
+	if err != nil {
+		fmt.Println("Failed to create email listener")
+		return err
+	}
+
+	emailPresentation := presentation.NewEmailListener(emailListener, app.sendEmailUseCase)
+	smsPresentation := presentation.NewSMSListener(smsListener, app.sendSMSUseCase)
+
+	app.emailListener = emailPresentation
+	app.smsListener = smsPresentation
+
+	return nil
 }
 
 func (app *NotificationApp) StartWorkers() {

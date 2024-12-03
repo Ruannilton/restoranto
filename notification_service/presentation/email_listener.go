@@ -5,36 +5,29 @@ import (
 
 	messagecontracts "github.com/Ruannilton/go-msg-contracts/pkg/message_contracts"
 	"github.com/Ruannilton/go-msg-contracts/pkg/queues"
+	"github.com/Ruannilton/notification-service/domain/dependencies"
 	"github.com/Ruannilton/notification-service/domain/models"
 	usecases "github.com/Ruannilton/notification-service/domain/use_cases"
-	amqp "github.com/rabbitmq/amqp091-go"
 )
 
 const EmailListenerName = "notification-service-email-listener"
 
 type EmailListener struct {
-	mqConnection *amqp.Connection
-	emailSender  usecases.SendEmailUseCase
+	emailSender usecases.SendEmailUseCase
+	listener    dependencies.IMessageListener
 }
 
-func NewEmailListener(mqConnection *amqp.Connection, emailSender usecases.SendEmailUseCase) EmailListener {
+func NewEmailListener(listener dependencies.IMessageListener, emailSender usecases.SendEmailUseCase) EmailListener {
 	return EmailListener{
-		mqConnection: mqConnection,
-		emailSender:  emailSender,
+		listener:    listener,
+		emailSender: emailSender,
 	}
 }
 
 func (listener EmailListener) ReceiveMessages(stopSig chan os.Signal) {
-	channel, err := listener.mqConnection.Channel()
+	defer listener.listener.Close()
 
-	if err != nil {
-		//TODO: handle error
-		return
-	}
-
-	defer channel.Close()
-
-	messageChannel, err := channel.Consume(queues.SendEmailQueue, EmailListenerName, false, false, false, false, nil)
+	messageChannel, err := listener.listener.Listen(queues.EmailValidationQueue)
 
 	if err != nil {
 		//TODO: handle error
@@ -47,10 +40,10 @@ func (listener EmailListener) ReceiveMessages(stopSig chan os.Signal) {
 			case <-stopSig:
 				return
 			case msg := <-messageChannel:
-				message, err := messagecontracts.SendEmailMessage{}.FromBinary(msg.Body)
+				message, err := messagecontracts.SendEmailMessage{}.FromBinary(msg.GetContent())
 
 				if err != nil {
-					msg.Nack(false, false)
+					msg.Nack(false)
 					continue
 				}
 
@@ -63,11 +56,11 @@ func (listener EmailListener) ReceiveMessages(stopSig chan os.Signal) {
 				err = listener.emailSender.Execute(email)
 
 				if err != nil {
-					msg.Nack(false, true)
+					msg.Nack(true)
 					continue
 				}
 
-				msg.Ack(false)
+				msg.Ack()
 			}
 		}
 	}()

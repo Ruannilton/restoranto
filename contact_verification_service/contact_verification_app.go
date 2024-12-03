@@ -32,7 +32,8 @@ func NewContactVerificationApp(stopSig chan os.Signal) (ContactVerificationApp, 
 	}
 
 	app.initUseCases()
-	app.initPresentation()
+	// TODO: handle error
+	_ = app.initPresentation()
 	return app, nil
 }
 
@@ -60,12 +61,28 @@ func (app *ContactVerificationApp) initUseCases() {
 	app.verifySmsUseCase = smsUseCase
 }
 
-func (app *ContactVerificationApp) initPresentation() {
-	emailPresentation := presentation.NewVerifyEmailListener(app.rmqpConnection, app.verifyEmailUseCase)
-	smsPresentation := presentation.NewVerifySMSListener(app.rmqpConnection, app.verifySmsUseCase)
+func (app *ContactVerificationApp) initPresentation() error {
+	emailListener, err := infrastructure.NewMessageListener(app.rmqpConnection)
+
+	if err != nil {
+		fmt.Println("Failed to create email listener")
+		return err
+	}
+
+	smsListener, err := infrastructure.NewMessageListener(app.rmqpConnection)
+
+	if err != nil {
+		fmt.Println("Failed to create sms listener")
+		return err
+	}
+
+	emailPresentation := presentation.NewVerifyEmailListener(emailListener, app.verifyEmailUseCase)
+	smsPresentation := presentation.NewVerifySMSListener(smsListener, app.verifySmsUseCase)
 
 	app.verifyEmailListener = emailPresentation
 	app.verifySmsListener = smsPresentation
+
+	return nil
 }
 
 func (app *ContactVerificationApp) StartWorkers() {

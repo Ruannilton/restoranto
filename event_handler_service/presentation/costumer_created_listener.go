@@ -3,37 +3,30 @@ package presentation
 import (
 	"os"
 
+	"github.com/Ruannilton/event-handler-service/domain/dependencies"
 	usecase "github.com/Ruannilton/event-handler-service/domain/use_case"
 	"github.com/Ruannilton/go-msg-contracts/pkg/events"
 	"github.com/Ruannilton/go-msg-contracts/pkg/queues"
-	amqp "github.com/rabbitmq/amqp091-go"
 )
 
 const CostumerCreatedListenerName = "event-handler-costumer-created-listener"
 
 type CostumerCreatedListener struct {
-	mqConnection *amqp.Connection
-	useCase      usecase.CostumerCreatedUseCase
+	listener dependencies.IMessageListener
+	useCase  usecase.CostumerCreatedUseCase
 }
 
-func NewCostumerCreatedListener(mqConnection *amqp.Connection, useCase usecase.CostumerCreatedUseCase) CostumerCreatedListener {
+func NewCostumerCreatedListener(listener dependencies.IMessageListener, useCase usecase.CostumerCreatedUseCase) CostumerCreatedListener {
 	return CostumerCreatedListener{
-		mqConnection: mqConnection,
-		useCase:      useCase,
+		listener: listener,
+		useCase:  useCase,
 	}
 }
 
 func (listener CostumerCreatedListener) ReceiveMessages(stopSig chan os.Signal) {
-	channel, err := listener.mqConnection.Channel()
+	defer listener.listener.Close()
 
-	if err != nil {
-		//TODO: handle error
-		return
-	}
-
-	defer channel.Close()
-
-	messageChannel, err := channel.Consume(queues.CostumerCreatedEventQueue, CostumerCreatedListenerName, false, false, false, false, nil)
+	messageChannel, err := listener.listener.Listen(queues.EmailValidationQueue)
 
 	if err != nil {
 		//TODO: handle error
@@ -46,11 +39,11 @@ func (listener CostumerCreatedListener) ReceiveMessages(stopSig chan os.Signal) 
 			case <-stopSig:
 				return
 			case msg := <-messageChannel:
-				message, err := desserializeMessage[events.CostumerCreatedEvent](msg.Body)
+				message, err := desserializeMessage[events.CostumerCreatedEvent](msg.GetContent())
 
 				if err != nil {
 					//TODO: handle error
-					msg.Nack(false, false)
+					msg.Nack(false)
 					continue
 				}
 
@@ -58,11 +51,11 @@ func (listener CostumerCreatedListener) ReceiveMessages(stopSig chan os.Signal) 
 
 				if err != nil {
 					//TODO: handle error
-					msg.Nack(false, true)
+					msg.Nack(true)
 					continue
 				}
 
-				msg.Ack(false)
+				msg.Ack()
 			}
 		}
 	}()
