@@ -1,6 +1,5 @@
-# Example Dockerfile for a Go microservice
 # Base image
-FROM golang:1.21 as builder
+FROM golang:1.23 as builder
 
 # Set working directory
 WORKDIR /app
@@ -15,11 +14,16 @@ COPY . .
 # Build the application
 RUN go build -o main .
 
-# Start a new stage for a clean image
-FROM debian:bullseye-slim
+# Use a compatible base image with an updated glibc version
+FROM debian:bookworm-slim
 
 # Set working directory
 WORKDIR /app
+
+# Install necessary runtime dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ca-certificates && \
+    rm -rf /var/lib/apt/lists/*
 
 # Copy the compiled binary from the builder stage
 COPY --from=builder /app/main ./main

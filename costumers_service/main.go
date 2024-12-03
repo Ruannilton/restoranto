@@ -10,19 +10,12 @@ import (
 	"time"
 
 	"github.com/gorilla/mux"
-	"github.com/joho/godotenv"
 )
 
 func main() {
-	err := godotenv.Load()
 
 	stopServerChannel := make(chan os.Signal, 1)
 	signal.Notify(stopServerChannel, syscall.SIGINT, syscall.SIGTERM)
-
-	if err != nil {
-		fmt.Println("Failed to read env vars")
-		return
-	}
 
 	costumerService, err := NewCostumersServiceApp(stopServerChannel)
 
